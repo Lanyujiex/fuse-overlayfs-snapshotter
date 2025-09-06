@@ -32,6 +32,7 @@ import (
 	"github.com/containerd/containerd/v2/core/snapshots/storage"
 	"github.com/containerd/continuity/fs"
 	"github.com/containerd/log"
+	"golang.org/x/sys/unix"
 )
 
 const (
@@ -287,7 +288,19 @@ func (o *snapshotter) Cleanup(ctx context.Context) error {
 		return err
 	}
 
-	for _, dir := range cleanup {
+	for i, dir := range cleanup {
+		target := strings.TrimSuffix(dir, "/fs")
+		target = strings.TrimSuffix(target, "/work")
+		fmt.Printf("umount dir  %s\n", target)
+		if err := unix.Unmount(target, 0); err != nil {
+			if err == unix.EINVAL {
+				// 不是挂载点，无需处理
+				fmt.Printf("umount dir %s 不是挂载点\n", target)
+			} else {
+				return fmt.Errorf("umount %s 失败: %w", target, err)
+			}
+		}
+		fmt.Printf("cleanup %d dir %s \n", i, dir)
 		if err := os.RemoveAll(dir); err != nil {
 			log.G(ctx).WithError(err).WithField("path", dir).Warn("failed to remove directory")
 		}
